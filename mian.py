@@ -5,6 +5,8 @@ import torch
 from torchvision import transforms
 import torch.nn as nn
 from PIL import Image
+import streamlit as st
+import os
 
 #gray
 transform_data_g = transforms.Compose([
@@ -85,45 +87,38 @@ classes = [
     'motocycle'
 ]
 
-@check_image_app.post("/predict/gray")
-async def check_image(file: UploadFile = File(...)):
-    try:
-        image_data = await file.read()
-        if not image_data:
-            raise HTTPException(status_code=400, detail="n0 file")
+st.title('FIVE TYPE CLASSIFIER MODEL')
+st.text('LOAD image')
 
-        img = Image.open(io.BytesIO(image_data))
-        img_tensor = transform_data_g(img).unsqueeze(0).to(device)
+type_image = st.file_uploader('drop images', type=['png', 'jpg', 'jpeg'])
+
+if type_image is not None:
+    st.image(type_image, caption='loader')
+
+model_type = st.selectbox(
+    "Choose model type",
+    ["GRAY model", "RGB model"]
+)
+
+if st.button('Determine the number'):
+    try:
+        if type_image is None:
+            st.error("Please upload an image first!")
+            st.stop()
+
+        image = Image.open(type_image).convert("RGB")
+
+        if model_type == "GRAY model":
+            tensor = transform_data_g(image).unsqueeze(0).to(device)
+            model = carcyc_gray
+        else:
+            tensor = transform_data_r(image).unsqueeze(0).to(device)
+            model = carcyc_rgb
 
         with torch.no_grad():
-            y_pred = carcyc_gray(img_tensor)
-            pred = y_pred.argmax(dim=1).item()
+            pred = model(tensor).argmax(1).item()
 
-        return {"Answer": classes[pred]}
-
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@check_image_app.post("/predict/rgb")
-async def check_image(file: UploadFile = File(...)):
-    try:
-        image_data = await file.read()
-        if not image_data:
-            raise HTTPException(status_code=400, detail="n0 file")
-
-        img = Image.open(io.BytesIO(image_data))
-        img_tensor = transform_data_r(img).unsqueeze(0).to(device)
-
-        with torch.no_grad():
-            y_pred = carcyc_rgb(img_tensor)
-            pred = y_pred.argmax(dim=1).item()
-
-        return {"Answer": classes[pred]}
+        st.success(f"Answer: {classes[pred]}")
 
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-if __name__ == '__main__':
-    uvicorn.run(check_image_app, host='127.0.0.1', port=8000)
+        st.error(f"Error: {str(e)}")
